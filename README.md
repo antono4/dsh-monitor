@@ -3,6 +3,8 @@
 A read-only live view over the session logs that DeepSeek Harness writes to `~/.dsh`,
 answering *what are the agents doing right now?*
 
+![DSH Mission Control: main at the centre with four working sub-agents orbiting it, amber status rings, signal dots flowing along the edges, and the live activity feed and agent roster alongside](docs/screenshot.webp)
+
 The whole app is one page — `index.php` — plus `api.php`. It reads session logs that DSH
 has already written, so DSH does not need to be running, and nothing under `~/.dsh` is
 ever written or moved.
@@ -266,6 +268,7 @@ retries its incomplete last frame next time.
 ```
 README.md           this file — install, setup and design notes
 LICENSE             MIT
+docs/screenshot.*   the image above
 index.php           live monitor shell (embeds the first snapshot) — the site root
 api.php             JSON: live only
 lib/Zstd.php        concatenated-frame zstd reader, incremental cache, CLI fallback
