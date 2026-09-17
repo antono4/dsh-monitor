@@ -327,6 +327,7 @@ html, body {
 }
 .acard.st-working { --ac: var(--c-amber); }
 .acard.st-done { --ac: var(--c-green); }
+.acard.st-stalled { --ac: var(--c-red); }
 /* #4fa3ff only reached 3.98:1 on its own 16% blue tint at 9px; this is the fix. */
 .acard.st-starting { --ac: #6db2ff; }
 .acard .hd { display: flex; align-items: center; gap: 7px; }

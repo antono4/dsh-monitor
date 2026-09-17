@@ -43,7 +43,7 @@ function h(?string $s): string
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DSH Mission Control</title>
-<link rel="stylesheet" href="assets/monitor.css?v=4">
+<link rel="stylesheet" href="assets/monitor.css?v=5">
 </head>
 <body>
 <div class="mc">
@@ -78,6 +78,7 @@ function h(?string $s): string
                 <span><i class="lg-robot" style="color:#ffb454"></i>working</span>
                 <span><i class="lg-robot" style="color:#37c98b"></i>done</span>
                 <span><i class="lg-robot" style="color:#4fa3ff"></i>starting</span>
+                <span><i class="lg-robot" style="color:#ff6b6b"></i>stalled</span>
                 <span class="lg-sep"></span>
                 <span class="lg-note">
                     <b class="lg-sig">●▸</b> signal flows to an agent while it works,
@@ -111,6 +112,6 @@ window.__MONITOR_INIT__ = <?= json_encode($snapshot, JSON_UNESCAPED_SLASHES | JS
 // Loaded without an explicit ?id → follow whichever session is newest.
 window.__MONITOR_FOLLOW__ = <?= $requested === '' ? 'true' : 'false' ?>;
 </script>
-<script src="assets/monitor.js?v=4"></script>
+<script src="assets/monitor.js?v=5"></script>
 </body>
 </html>

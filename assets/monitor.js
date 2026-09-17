@@ -84,7 +84,7 @@
         return s.length > 22 ? s.slice(0, 21) + '…' : s;
     }
 
-    var COL = { working: '#ffb454', done: '#37c98b', starting: '#4fa3ff', idle: '#64748b' };
+    var COL = { working: '#ffb454', done: '#37c98b', starting: '#4fa3ff', stalled: '#ff6b6b', idle: '#64748b' };
     function statusColor(st) { return COL[st] || COL.idle; }
 
     /**
@@ -151,7 +151,8 @@
         };
         var tiles = [
             { k: 'subagents', v: num(s.subagents || 0), a: N.violet,
-              s: (s.working || 0) + ' working · ' + (s.done || 0) + ' done' },
+              s: (s.working || 0) + ' working · ' + (s.done || 0) + ' done' +
+                 (s.stalled ? ' · ' + s.stalled + ' stalled' : '') },
             { k: 'turns / steps', v: num(root.turnStarts) + ' / ' + num(root.steps), a: N.blue, s: 'root agent' },
             { k: 'tool calls', v: num(root.toolCalls), a: N.cyan,
               s: Object.keys(root.byTool || {}).length + ' distinct' },
@@ -163,7 +164,8 @@
               spark: sparkline(state.burnHistory, N.amber) },
             { k: 'elapsed', v: dur(agentDur(root, d.now)), a: N.indigo, s: 'wall clock' },
             { k: 'last event', v: dur(root.quietMs) + ' ago', a: N.pink,
-              s: root.status === 'working' ? 'still running' : 'finished' }
+              s: root.status === 'working' ? 'still running'
+                 : (root.status === 'stalled' ? 'turn never closed' : 'finished') }
         ];
         $('tiles').innerHTML = tiles.map(function (t) {
             return '<div class="tile" style="--accent:' + t.a + '">' +
@@ -508,7 +510,10 @@
     function visibleAgents(d) {
         return (d.agents || []).filter(function (a) {
             if (a.id === d.root.id) return true;
-            if (a.status !== 'done') return true;              // working / starting
+            // 'stalled' is an open turn that has gone silent with no tool running —
+            // the log will never balance, so treat it as finished and let it leave
+            // the stage rather than parking a phantom robot there forever.
+            if (a.status !== 'done' && a.status !== 'stalled') return true;   // working / starting
             if (state.finishedMode === 'shown') return true;
             if (state.finishedMode === 'hidden') return false;
             // 'auto': linger briefly after finishing, then leave the stage.
@@ -777,6 +782,10 @@
             box.className = 'now idle';
             box.innerHTML = '<span class="now-label">thinking</span><span class="now-text">' +
                 esc(root.lastText ? root.lastText.slice(0, 200) : 'waiting for the model…') + '</span>';
+        } else if (root.status === 'stalled') {
+            box.className = 'now idle';
+            box.innerHTML = '<span class="now-label">stalled</span><span class="now-text">' +
+                esc('open turn, nothing running, silent for ' + dur(root.quietMs)) + '</span>';
         } else {
             box.className = 'now idle';
             box.innerHTML = '<span class="now-label">idle</span><span class="now-text">' +

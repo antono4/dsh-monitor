@@ -11,6 +11,13 @@ final class LiveMonitor
 {
     private const RECENT_PER_AGENT = 12;
 
+    /**
+     * How long an open turn may stay silent with no tool running before it is called
+     * stalled. Well past the 20–60 s a model call can take, so it never fires on an
+     * agent that is merely thinking.
+     */
+    private const STALLED_MS = 300000;
+
     /** Per-request memo of headers(), keyed by DSH home. */
     private static array $headersMemo = [];
 
@@ -129,12 +136,11 @@ final class LiveMonitor
 
         $now = (int) round(microtime(true) * 1000);
         foreach ($agents as &$a) {
-            $a['status'] = $this->statusFor($a);
+            // quietMs must be set before statusFor(): "stalled" is a judgement about
+            // how long the log has been silent, so the status depends on it.
             $a['elapsedMs'] = $a['createdAt'] ? $now - $a['createdAt'] : null;
-            // How long since this agent last wrote an event. A working agent that is
-            // quiet is most likely waiting on the model, not hung — the UI dims it
-            // rather than calling it stalled.
             $a['quietMs'] = $a['lastEventAt'] ? $now - $a['lastEventAt'] : null;
+            $a['status'] = $this->statusFor($a);
         }
         unset($a);
 
@@ -142,11 +148,14 @@ final class LiveMonitor
         $childIds = array_values(array_filter($ids, fn($i) => $i !== $rootId));
         $working = 0;
         $done = 0;
+        $stalled = 0;
         foreach ($childIds as $cid) {
             if ($agents[$cid]['status'] === 'working') {
                 $working++;
             } elseif ($agents[$cid]['status'] === 'done') {
                 $done++;
+            } elseif ($agents[$cid]['status'] === 'stalled') {
+                $stalled++;
             }
         }
 
@@ -160,15 +169,34 @@ final class LiveMonitor
                 'subagents' => count($childIds),
                 'working' => $working,
                 'done' => $done,
+                'stalled' => $stalled,
                 'children' => $childIds,
             ],
             'feed' => $feed,
         ];
     }
 
+    /**
+     * working | stalled | done | starting.
+     *
+     * A working agent writes nothing while it waits on the model, so silence alone
+     * proves nothing — 20–60 s gaps are normal and must not read as a hang.
+     *
+     * Two things together do mean the turn is never coming back: a long silence AND
+     * no tool in flight. A slow command holds `currentTool` for its whole run, so a
+     * genuinely long tool call is never mislabelled; whereas an interrupted
+     * continuable sub-agent can leave a turn/start behind with nothing running, and
+     * no future event will ever balance the count. Without this the robot sits on
+     * the constellation as "working" forever.
+     */
     private function statusFor(array $a): string
     {
         if ($a['openTurn']) {
+            if ($a['currentTool'] === null
+                && $a['quietMs'] !== null
+                && $a['quietMs'] > self::STALLED_MS) {
+                return 'stalled';
+            }
             return 'working';
         }
         return $a['turnEnds'] > 0 ? 'done' : 'starting';
