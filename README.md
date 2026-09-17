@@ -3,7 +3,14 @@
 A read-only live view over the session logs that DeepSeek Harness writes to `~/.dsh`,
 answering *what are the agents doing right now?*
 
-**https://harness-demo.test/** — the whole app is that one page plus `api.php`.
+The whole app is one page — `index.php` — plus `api.php`. It reads session logs that DSH
+has already written, so DSH does not need to be running, and nothing under `~/.dsh` is
+ever written or moved.
+
+> **There is no authentication anywhere in this app.** It renders your entire session
+> history: every prompt, reply, command, file path and tool result. Keep it on
+> `127.0.0.1` or behind an authenticating proxy — see
+> [Before you expose it](#before-you-expose-it).
 
 ## Requirements
 
@@ -14,8 +21,99 @@ answering *what are the agents doing right now?*
 | `libzstd` ≥ 1.4 | a session log is a series of concatenated zstd frames |
 | DSH session logs | `~/.dsh/sessions/` must exist and be readable |
 
-There is no build step, no Composer install, no database and no config file — it reads
-`$HOME` and nothing else. Point any web server at this directory and you are running.
+## Install and setup
+
+No build step, no Composer install, no database, no config file. Clone it, check the
+requirements, point a web server at the directory.
+
+```bash
+git clone https://github.com/<you>/dsh-mission-control.git
+cd dsh-mission-control
+```
+
+### 1. Check the requirements
+
+```bash
+php -v                       # 8.2 or newer
+php -m | grep -i '^ffi'      # FFI must be listed
+ldconfig -p | grep libzstd   # libzstd.so.1 must be found
+ls ~/.dsh/sessions           # DSH must have written at least one session
+```
+
+If something is missing:
+
+| Distro | Install |
+|---|---|
+| Debian / Ubuntu | `sudo apt install php8.2-cli php8.2-fpm php8.2-ffi libzstd1` |
+| Fedora / RHEL | `sudo dnf install php-cli php-fpm php-ffi libzstd` |
+| macOS (Homebrew) | `brew install php zstd` |
+
+On Debian and Ubuntu, `FFI` normally ships inside `php8.x-common`; if `php -m` does not
+list it, install `php8.2-ffi` and restart PHP.
+
+### 2. Run it
+
+**Quickest — PHP's own server, for looking at it on your own machine:**
+
+```bash
+php -S 127.0.0.1:8080
+# open http://127.0.0.1:8080/
+```
+
+That binds to localhost only and is not something to expose. It works under any SAPI: if
+`FFI::cdef()` is unavailable in-process, the decoder automatically shells out to
+`bin/zstddump.php`, which is why the same code runs unchanged under FPM.
+
+**Or behind nginx + PHP-FPM** — any ordinary PHP vhost will do:
+
+```nginx
+server {
+    listen 80;
+    server_name dsh.test;
+    root /path/to/dsh-mission-control;
+    index index.php;
+
+    location / { try_files $uri $uri/ /index.php?$query_string; }
+
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+    }
+
+    # keeps .git and the var/ cache out of reach
+    location ~ /\.(?!well-known) { deny all; }
+}
+```
+
+### 3. The one gotcha: which user PHP runs as
+
+The app locates DSH by reading `$HOME`, and falls back to the home directory of the user
+the PHP process is running as. So **the PHP user must be the one that owns `~/.dsh`** —
+normally you.
+
+If PHP-FPM runs as `www-data` while your logs are in `/home/you/.dsh`, the dashboard will
+come up empty. Run the pool as yourself instead:
+
+```ini
+; /etc/php/8.2/fpm/pool.d/dsh.conf
+[dsh]
+user = yourname
+group = yourname
+listen = /run/php/php8.2-fpm-dsh.sock
+```
+
+…then point `fastcgi_pass` at that socket.
+
+The same user also needs to write `var/cache/` inside the project (that is the decoded-log
+cache, and the only thing this app ever writes), so make sure the project directory is
+writable by it — or pre-create `var/cache` owned by that user.
+
+### 4. Open it
+
+Open the site root. With no `?id=` it **follows whichever session is newest**, so just
+start a DSH session and delegate to a sub-agent — the robots appear within a second or
+two. Append `?id=<session-id>` to pin one session instead.
 
 ## The monitor (live)
 
@@ -25,7 +123,7 @@ announces it in the parent with a `subagent/catalog` event carrying a human labe
 
 | Area | Shows |
 |---|---|
-| Metric tiles | sub-agents working/done, turns, steps, tool calls, errors, tokens, **burn rate** (smoothed, with sparkline), elapsed, time since last event |
+| Metric tiles | sub-agents working/done/stalled, turns, steps, tool calls, errors, tokens, **burn rate** (smoothed, with sparkline), elapsed, time since last event |
 | Agent constellation | robots: `main` at the centre, each sub-agent orbiting by delegation depth, coloured by status |
 | Edges | **glowing signal dots flow outward while an agent works**; when it finishes, they flow back to `main` for a few seconds (the hand-off) |
 | NOW bar | the tool the root agent is executing this second, or "thinking" while it waits on the model |
@@ -55,6 +153,21 @@ safe. They do not wake on their own; only an explicit message revives one.
 Auto-hide keys off **finished**, not raw quiet time, on purpose: an agent waiting on the
 model writes no log events for 20–60 s while it is genuinely working, so hiding on
 quiet-time alone would make robots blink out mid-thought and reappear.
+
+#### Stalled agents
+
+Status comes from the log: a turn is open while `turn/start` outnumbers `turn/end`. An
+interrupted continuable sub-agent can leave a turn open with nothing behind it — the
+harness starts a fresh turn to deliver the "stopped" notice, that turn is abandoned, and
+no later event will ever balance the count. Such an agent would read as `working`
+permanently, which is how a live demo ended up with phantom robots that nothing could
+clear.
+
+So an open turn that has **both** been silent for over 5 minutes **and** has no tool in
+flight is reported as **`stalled`** (red), and auto-hide drops it like a finished agent.
+Requiring both is what makes it safe: a slow command holds a pending tool call for its
+whole run, so a genuinely long tool call is never mislabelled, and an agent that is merely
+thinking is nowhere near 5 minutes.
 
 A busy ring grows its radius with the agent count and labels radiate outward from each
 node, so ten concurrent delegations stay readable rather than overlapping.
@@ -94,8 +207,8 @@ vertically and the roster scrolls sideways. Below 1000px wide the stage stacks a
 page is allowed to scroll again.
 
 ```bash
-curl 'https://harness-demo.test/api.php?action=live'            # newest root session
-curl 'https://harness-demo.test/api.php?action=live&id=<id>'    # a specific root
+curl 'http://127.0.0.1:8080/api.php?action=live'          # newest root session
+curl 'http://127.0.0.1:8080/api.php?action=live&id=<id>'  # a specific root
 ```
 
 ## Why there is a decoder in here
@@ -148,9 +261,11 @@ been consumed, so a poll only decodes the new tail — a full decode of the larg
 The offset always lands on a frame boundary, so a log that is still being written simply
 retries its incomplete last frame next time.
 
-## Layout
+## Files
 
 ```
+README.md           this file — install, setup and design notes
+LICENSE             MIT
 index.php           live monitor shell (embeds the first snapshot) — the site root
 api.php             JSON: live only
 lib/Zstd.php        concatenated-frame zstd reader, incremental cache, CLI fallback
@@ -170,3 +285,19 @@ var/cache/          decoded logs — three files per session (.jsonl, .offset, .
   trailing decode failure returns the events decoded so far instead of erroring.
 - Token totals come from the harness's projection cache; per-message usage comes from
   `assistant/message` events.
+
+## Before you expose it
+
+This is a local developer tool: **no authentication, no sessions, no rate limiting, no
+read-only viewer mode.** Anyone who can reach the URL can read every session you have ever
+run — prompts, replies, commands, file paths and tool output.
+
+- Bind it to `127.0.0.1` (as the `php -S` example does) or to a private interface only.
+- To reach it from elsewhere, put it behind a reverse proxy that authenticates, and keep
+  the DSH host itself off the public internet.
+- Do not drop the `location ~ /\.` rule from the nginx snippet — that is what keeps
+  `.git/` (and so your full repository history) from being served.
+
+## License
+
+[MIT](LICENSE) — use it, fork it, modify it, ship it, sell it. No warranty.
