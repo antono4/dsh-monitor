@@ -1,0 +1,8 @@
+# Decoded-log cache — rebuilt on demand from ~/.dsh, keyed by sha1 of the
+# source log path. Each session produces a .jsonl + .offset + .lock trio.
+# Never source; safe to delete at any time.
+/var/cache/
+
+# Editor / OS cruft
+.DS_Store
+*.swp

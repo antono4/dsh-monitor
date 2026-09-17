@@ -1,0 +1,364 @@
+/*
+ * DSH Mission Control — a gapless control wall.
+ *
+ * Design rules:
+ *   - no gaps and no rounded corners: panels are tiles in a mosaic, separated by
+ *     1px rules and distinguished by hue rather than by whitespace
+ *   - one screen: the page never scrolls, only the feed (and the roster sideways)
+ *   - dark base, saturated accents used sparingly on rules, numbers and heads
+ */
+
+:root {
+    --bg: #05070c;
+    --panel: #090d14;
+    --line: #1a2230;
+    --line-2: #26303f;
+
+    --text: #e8eef8;
+    --dim: #b6c2d2;
+    --faint: #94a3b8;
+
+    --c-blue: #4fa3ff;
+    --c-amber: #ffb454;
+    --c-green: #37c98b;
+    --c-red: #ff6b6b;
+    --c-violet: #a77bff;
+    --c-cyan: #35c9d6;
+    --c-pink: #e879a8;
+    --c-indigo: #7d8bff;
+
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.45 var(--sans);
+}
+
+.mc {
+    height: 100vh;
+    height: 100dvh;
+    display: grid;
+    /* The explicit minmax(0, 1fr) column matters: without it the single implicit
+       column sizes to the roster's min-content width (one 232px card per agent),
+       which made the shell ~1414px wide and, under body{overflow:hidden}, pushed
+       the pause button off screen with no way to scroll to it. */
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    background:
+        radial-gradient(1100px 420px at 18% -8%, rgba(79, 163, 255, .06), transparent 70%),
+        radial-gradient(900px 380px at 88% 4%, rgba(53, 201, 214, .05), transparent 70%),
+        var(--bg);
+}
+
+/* ============================== top bar ============================== */
+.mc-top {
+    display: flex; align-items: center; gap: 12px;
+    height: 44px; padding: 0 12px;
+    overflow: hidden;
+    background: linear-gradient(90deg, rgba(79, 163, 255, .12), transparent 34%), #070b11;
+    border-bottom: 1px solid var(--line);
+}
+.mc-logo {
+    width: 22px; height: 22px; flex-shrink: 0;
+    background: conic-gradient(from 140deg, var(--c-amber), var(--c-green), var(--c-blue), var(--c-amber));
+    box-shadow: 0 0 14px rgba(79, 163, 255, .4);
+    animation: spin 9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.mc-brand { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.mc-brand h1 {
+    margin: 0; font-size: 13px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase;
+    white-space: nowrap; color: var(--text); flex-shrink: 0;
+}
+.mc-brand p {
+    margin: 0; font-family: var(--mono); font-size: 11px; color: var(--faint);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 1 1 auto; min-width: 0;
+}
+
+.mc-controls { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.mc-live {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; color: var(--c-green);
+}
+.mc-live i {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--c-green);
+    box-shadow: 0 0 0 0 rgba(55, 201, 139, .7); animation: ping 1.7s ease-out infinite;
+}
+@keyframes ping {
+    0%   { box-shadow: 0 0 0 0 rgba(55, 201, 139, .6); }
+    70%  { box-shadow: 0 0 0 10px rgba(55, 201, 139, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(55, 201, 139, 0); }
+}
+.mc-live.paused { color: var(--faint); }
+.mc-live.paused i { background: var(--faint); animation: none; }
+.mc-clock { font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+
+.mc-btn {
+    background: #0d131b; border: 1px solid var(--line-2); color: var(--dim);
+    padding: 4px 10px; font-family: var(--mono); font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.mc-btn:hover { color: var(--text); border-color: var(--c-blue); background: #101923; }
+.mc-btn.off { color: var(--faint); border-color: var(--line); background: transparent; }
+
+/* ============================== metric tiles ============================== */
+.tiles {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(126px, 1fr);
+    overflow-x: auto; border-bottom: 1px solid var(--line); background: #070a0f;
+}
+.tile {
+    position: relative; min-width: 0; padding: 6px 11px 7px;
+    border-right: 1px solid var(--line);
+    background: linear-gradient(180deg,
+        color-mix(in srgb, var(--accent) 26%, transparent),
+        color-mix(in srgb, var(--accent) 6%, transparent));
+}
+.tile::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: var(--accent); }
+.tile:last-child { border-right: none; }
+.tile .k {
+    font-family: var(--mono); font-size: 9px; letter-spacing: .13em; text-transform: uppercase;
+    color: color-mix(in srgb, var(--accent) 62%, #ffffff 38%);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tile .v {
+    font-family: var(--mono); font-size: 19px; font-weight: 650; line-height: 1.15;
+    margin-top: 3px; color: var(--accent); letter-spacing: -.02em;
+    text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 45%, transparent);
+    white-space: nowrap;
+}
+.tile .s {
+    font-family: var(--mono); font-size: 9.5px; color: var(--dim); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Fixed box: the burn-rate sparkline is always rendered at this size, so the row
+   height cannot change when its data arrives. */
+.tile .spark { display: block; margin-top: 2px; flex-shrink: 0; }
+
+/* ============================== panels ============================== */
+.stage { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); min-height: 0; }
+
+.panel {
+    position: relative; display: flex; flex-direction: column;
+    min-width: 0; min-height: 0; background: var(--panel);
+}
+/* The 2px hue bar that used to cap every panel is gone from the constellation and
+   the activity feed. Only the roster keeps it, as a separator above the bottom strip. */
+.p-roster::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+    background: var(--accent); z-index: 2;
+}
+.panel-head {
+    flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+    padding: 7px 12px; border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--dim); background: rgba(255, 255, 255, .014);
+}
+.ph-dot { width: 6px; height: 6px; background: var(--accent); box-shadow: 0 0 9px var(--accent); flex-shrink: 0; }
+.panel-hint { margin-left: auto; color: var(--faint); letter-spacing: 0; text-transform: none; font-size: 10.5px; }
+
+.p-graph {
+    --accent: var(--c-cyan);
+    border-right: 1px solid var(--line);
+    background:
+        radial-gradient(760px 320px at 50% 46%, color-mix(in srgb, var(--c-cyan) 9%, transparent), transparent 72%),
+        linear-gradient(180deg, color-mix(in srgb, var(--c-cyan) 9%, transparent), transparent 260px),
+        var(--panel);
+}
+.p-feed {
+    --accent: var(--c-amber);
+    background:
+        radial-gradient(560px 300px at 80% 0%, color-mix(in srgb, var(--c-amber) 10%, transparent), transparent 70%),
+        linear-gradient(180deg, color-mix(in srgb, var(--c-amber) 8%, transparent), transparent 260px),
+        var(--panel);
+}
+.p-roster {
+    --accent: var(--c-green);
+    border-top: 1px solid var(--line);
+    background:
+        linear-gradient(90deg, color-mix(in srgb, var(--c-green) 9%, transparent), transparent 40%),
+        linear-gradient(180deg, color-mix(in srgb, var(--c-green) 7%, transparent), transparent 150px),
+        #070b11;
+}
+
+/* ============================== constellation ============================== */
+.graph-wrap { flex: 1; min-height: 0; display: flex; }
+#graph { width: 100%; height: 100%; display: block; }
+
+/* No `stroke` here: an author CSS declaration beats the SVG stroke="" attribute,
+   so setting it would flatten every edge to one colour and ignore the per-status
+   colour the JS computes. Same reason .particle carries no `fill`. */
+.edge { fill: none; }
+.edge.active { stroke-dasharray: 7 9; animation: flow 1s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -32; } }
+
+.node-ring { fill: none; }
+.node-ring.pulse { animation: nodepulse 2.1s ease-out infinite; }
+@keyframes nodepulse {
+    0%   { r: 40; opacity: .5; }
+    100% { r: 64; opacity: 0; }
+}
+/* Only a genuinely new agent carries .node-new, so it eases in while the ones
+   already on screen stay still — the SVG is rebuilt from a string every poll, so
+   animating unconditionally would make every robot blink on every poll. */
+@keyframes nodein {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+.node.node-new { animation: nodein .5s ease-out; }
+.node-label { font-family: var(--mono); font-size: 13px; fill: var(--text); }
+.node-sub { font-family: var(--mono); font-size: 11px; fill: var(--faint); }
+/* .particle gets its fill from the element attribute: amber outbound, green on the
+   hand-off back to main. Do not add a fill here or both become amber. */
+
+.legend {
+    flex-shrink: 0; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 6px 12px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+    background: rgba(0, 0, 0, .25);
+}
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .lg-sep { flex: 1; }
+.legend .lg-note { color: var(--dim); }
+.legend .lg-sig { color: var(--c-amber); letter-spacing: -1px; }
+.legend .lg-robot { width: 15px; height: 12px; display: inline-block; background: currentColor; position: relative; margin-top: 3px; }
+.legend .lg-robot::before {
+    content: ""; position: absolute; left: 2.5px; top: 3.5px;
+    width: 3.2px; height: 3.2px; border-radius: 50%;
+    background: #05070c; box-shadow: 6px 0 0 #05070c;
+}
+.legend .lg-robot::after {
+    content: ""; position: absolute; left: 50%; top: -4px;
+    width: 1.5px; height: 4.5px; background: currentColor; transform: translateX(-50%);
+}
+
+/* ============================== now bar ============================== */
+.now {
+    flex-shrink: 0; display: flex; align-items: center; gap: 10px; min-width: 0;
+    padding: 7px 12px; border-top: 1px solid var(--line);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--c-amber) 14%, transparent), transparent 62%);
+    box-shadow: inset 3px 0 0 var(--c-amber);
+}
+.now-label {
+    flex-shrink: 0; font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--c-amber);
+}
+.now-text {
+    font-family: var(--mono); font-size: 12px; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.now.idle {
+    background: linear-gradient(90deg, rgba(100, 116, 139, .12), transparent 62%);
+    box-shadow: inset 3px 0 0 var(--faint);
+}
+.now.idle .now-label { color: var(--faint); }
+.now.idle .now-text { color: var(--dim); }
+
+/* ============================== feed ============================== */
+.feed {
+    list-style: none; margin: 0; padding: 5px 6px 6px;
+    flex: 1; min-height: 0; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 3px;
+    scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+.feed::-webkit-scrollbar { width: 8px; }
+.feed::-webkit-scrollbar-thumb { background: var(--line-2); }
+.feed li {
+    border-left: 3px solid var(--line-2);
+    background: rgba(255, 255, 255, .016);
+    padding: 5px 9px;
+    animation: slidein .28s ease-out;
+}
+@keyframes slidein {
+    from { opacity: 0; transform: translateY(-5px); }
+    to   { opacity: 1; transform: none; }
+}
+.feed li.k-tool { border-left-color: var(--c-amber); background: color-mix(in srgb, var(--c-amber) 7%, transparent); }
+.feed li.k-assistant { border-left-color: var(--c-indigo); background: color-mix(in srgb, var(--c-indigo) 7%, transparent); }
+.feed li.k-user { border-left-color: var(--c-blue); background: color-mix(in srgb, var(--c-blue) 8%, transparent); }
+.feed li.k-injected { border-left-color: var(--faint); }
+.feed li.k-deliverable { border-left-color: var(--c-green); background: color-mix(in srgb, var(--c-green) 8%, transparent); }
+.feed li.k-policy { border-left-color: var(--c-cyan); background: color-mix(in srgb, var(--c-cyan) 7%, transparent); }
+.feed li.st-error { border-left-color: var(--c-red); background: color-mix(in srgb, var(--c-red) 12%, transparent); }
+.feed li.st-running { background: color-mix(in srgb, var(--c-amber) 12%, transparent); }
+
+.feed .row1 { display: flex; align-items: center; gap: 7px; }
+.feed .who {
+    font-family: var(--mono); font-size: 9.5px; padding: 1px 6px;
+    background: rgba(255, 255, 255, .05); color: var(--dim);
+    max-width: 44%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0;
+}
+.feed .kind {
+    font-family: var(--mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--faint); flex-shrink: 0;
+}
+.feed .tm { margin-left: auto; font-family: var(--mono); font-size: 9.5px; color: var(--faint); flex-shrink: 0; }
+.feed .txt {
+    margin-top: 2px; font-family: var(--mono); font-size: 11px; color: var(--dim);
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    word-break: break-word;
+}
+.feed .spinner {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    border: 1.5px solid rgba(255, 180, 84, .3); border-top-color: var(--c-amber);
+    animation: spin .7s linear infinite;
+}
+
+/* ============================== agent roster ============================== */
+.roster {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(232px, 1fr);
+    overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+.roster::-webkit-scrollbar { height: 8px; }
+.roster::-webkit-scrollbar-thumb { background: var(--line-2); }
+
+.acard {
+    position: relative; min-width: 0; padding: 7px 10px 8px;
+    border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--ac) 8%, transparent), transparent 78%);
+}
+.acard.st-working { --ac: var(--c-amber); }
+.acard.st-done { --ac: var(--c-green); }
+/* #4fa3ff only reached 3.98:1 on its own 16% blue tint at 9px; this is the fix. */
+.acard.st-starting { --ac: #6db2ff; }
+.acard .hd { display: flex; align-items: center; gap: 7px; }
+.acard .nm {
+    font-size: 12px; font-weight: 620; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.acard .st {
+    margin-left: auto; flex-shrink: 0; font-family: var(--mono); font-size: 9px; letter-spacing: .1em;
+    text-transform: uppercase; padding: 1px 7px; color: var(--ac);
+    background: color-mix(in srgb, var(--ac) 16%, transparent);
+}
+.acard .meta {
+    display: flex; gap: 9px; flex-wrap: wrap; margin-top: 4px;
+    font-family: var(--mono); font-size: 10px; color: var(--faint);
+}
+.acard .cur {
+    margin-top: 5px; padding: 4px 7px; font-family: var(--mono); font-size: 10.5px; color: var(--dim);
+    background: rgba(255, 180, 84, .07); box-shadow: inset 2px 0 0 var(--c-amber);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.acard .cur.quiet { background: rgba(100, 116, 139, .08); box-shadow: inset 2px 0 0 var(--faint); color: var(--faint); }
+.acard .bar { display: flex; height: 3px; margin-top: 6px; background: rgba(255, 255, 255, .05); overflow: hidden; }
+.acard .bar i { display: block; height: 100%; }
+
+/* ============================== narrow screens ============================== */
+@media (max-width: 1000px) {
+    html, body { overflow: auto; height: auto; }
+    .mc { height: auto; }
+    .stage { grid-template-columns: 1fr; }
+    .p-graph { border-right: none; border-bottom: 1px solid var(--line); }
+    .graph-wrap { height: 380px; }
+    .feed { max-height: 320px; }
+    .mc-brand p { max-width: 30vw; }
+}
