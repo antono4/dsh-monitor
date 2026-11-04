@@ -1,1 +1,30 @@
-Last updated: 2026-11-04 15:37:20 WIB
+# dsh-monitor
+
+
+
+## 📋 Overview
+
+This repository contains **14 files** and is built with the following technologies:
+
+PHP
+
+## 🚀 Quick Start
+
+```bash
+php -S localhost:8000
+```
+
+## ✨ Features
+
+- 📝 Auto-generated documentation
+
+## 🛠️ Technologies
+
+PHP
+
+## 📄 License
+
+MIT License
+
+---
+*Last updated: 2026-11-04 16:19:00 WIB*
